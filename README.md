@@ -1,7 +1,12 @@
-EastEndersMetadata
-==================
 
-Python scripts for EastEnders metadata extraction (for TRECVid 2013 Instance Search task)
+Python scripts for EastEnders metadata extraction
+(for TRECVid 2013 Instance Search task)
+
+For each episode in TRECVid 2013 INS, this script will download the cast and a
+longer synopsis than the one provided in the original metadata file, using
+the [BBC Programmes API](http://www.bbc.co.uk/programmes).
+
+Enjoy!
 
 Prerequisites
 -------------
