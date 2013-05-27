@@ -1,95 +1,74 @@
-import json
-import requests
+#!/usr/bin/env python
+# encoding: utf-8
 
-JSON_DIR = '/vol/corpora4/tvseries/EastEnders/eastenders/metadata/'
-BBC_URL = 'http://www.bbc.co.uk/programmes'
-SYNOPSIS_DIR = '/tmp/synopsis/'
-ACTOR_DIR = '/tmp/actors/'
+# Copyright (c) 2013  Herve BREDIN (http://herve.niderb.fr/)
+# All rights reserved.
 
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#     * Redistributions of source code must retain the above copyright
+#       notice, this list of conditions and the following disclaimer.
+#     * Redistributions in binary form must reproduce the above copyright
+#       notice, this list of conditions and the following disclaimer in the
+#       documentation and/or other materials provided with the distribution.
 
-class BBCProgrammes(object):
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
 
-    BBC_URL = 'http://www.bbc.co.uk/programmes'
+import argparse
+import os
+import sys
+import bbc
 
-    def __init__(self, pathToJSON):
-        super(BBCProgrammes, self).__init__()
-        self.pathToJSON = pathToJSON
+parser = argparse.ArgumentParser(
+    description='Get EastEnders cast and synposis from BBC Programmes API.')
 
-    def __call__(self, uri):
+parser.add_argument('json', type=str,
+                    help='path to directory where JSON metadata files are '
+                         'stored (e.g. eastenders/metadata/')
 
-        # load eastenders/metadata/XXXXX.json file
-        path = '%s/%s.json' % (self.pathToJSON, uri)
-        with open(path, 'r') as f:
-            data = json.load(f)
+parser.add_argument('--cast', type=str,
+                    help='path to existing directory where cast lists should '
+                         'be downloaded (e.g. /tmp/cast/)')
 
-        # get episode and version pids from it
-        try:
-            episode = data['episode']['pid']
-        except:
-            print 'No episode pid for %s' % uri
-            episode = None
+parser.add_argument('--synopsis', type=str,
+                    help='path to existing directory where synopses should '
+                         'be downloaded (e.g. /tmp/synposis/)')
 
-        try:
-            version = data['version']['pid']
-        except:
-            print 'No version pid for %s' % uri
-            version = None
+args = parser.parse_args()
 
-        # get episode metadata from BBC Programmes
-        episode_data = None
-        if episode:
-            try:
-                url = '%s/%s.json' % (BBC_URL, episode)
-                r = requests.get(url)
-                episode_data = r.json()
-            except:
-                print 'Error requesting %s' % url
-                # episode_data = None
+# get unique resource identifier (one per episode)
+uris = [name[:-5] for name in os.listdir(args.json) if name[-5:] == '.json']
 
-        # get version metadata from BBC Programmes
-        version_data = None
-        if version:
-            try:
-                url = '%s/%s.json' % (BBC_URL, version)
-                r = requests.get(url)
-                version_data = r.json()
-            except:
-                print 'Error requesting %s' % url
-                # version_data = None
+# initialize BBC Programme API
+api = bbc.BBCProgrammes(args.json)
 
-        result = {}
-        if episode_data:
-            result['synopsis'] = episode_data['programme']['long_synopsis']
-        else:
-            result['synopsis'] = ''
-
-        if version_data:
-            actors = []
-            for contributor in version_data['version']['contributors']:
-                if contributor['role'] == 'Actor':
-                    character_name = contributor['character_name']
-                    last_name = contributor['family_name']
-                    first_name = contributor['given_name']
-                    actors.append((first_name, last_name, character_name))
-            result['cast'] = actors
-        else:
-            result['cast'] = []
-
-        return result
-
-with open('uris.lst', 'r') as f:
-    uris = [u.strip() for u in f.readlines()]
-
-metadata = BBCProgrammes(JSON_DIR)
-
+# process one episode at at time
 for u, uri in enumerate(uris):
 
-    print "%d/%d -- %s" % (u+1, len(uris), uri)
-    data = metadata(uri)
+    # feedback to the user
+    sys.stdout.write('%d/%d | Episode %s\n' %
+                     (u+1, len(uris), uri))
 
-    with open('%s/%s.txt' % (SYNOPSIS_DIR, uri), 'w') as f:
-        f.write('%s' % data['synopsis'])
+    # get metadata for current episode
+    data = api(uri)
 
-    with open('%s/%s.txt' % (ACTOR_DIR, uri), 'w') as f:
-        for actor in data['cast']:
-            f.write('%s|%s|%s\n' % actor)
+    # save cast information to file
+    if hasattr(args, 'cast'):
+        with open('%s/%s.txt' % (args.cast, uri), 'w') as f:
+            for actor in data['cast']:
+                f.write('%s|%s|%s\n' % actor)
+
+    # save synopsis to file
+    if hasattr(args, 'synopsis'):
+        with open('%s/%s.txt' % (args.synopsis, uri), 'w') as f:
+            f.write('%s' % data['synopsis'])
